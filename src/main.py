@@ -2,209 +2,153 @@
 """AI Image Generation Annotation Tool - Generate markdown for image review."""
 
 import sys
-import re
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Optional
-from collections import defaultdict
-from urllib.parse import quote, unquote
+from typing import List
+from dataclasses import dataclass
 
 from natsort import natsorted
 from loguru import logger
 
 
-def discover_url_folders() -> List[Path]:
-    """Find all subdirectories containing URL text files in 04.1.IMAGE_URL."""
-    base_path = Path("USER-FILES/04.INPUT/04.1.IMAGE_URL")
+@dataclass
+class Shot:
+    """Single shot with URLs from multiple folders."""
+    urls: List[str | None]
+    filenames: List[str | None]
+
+
+def main() -> None:
+    """Generate markdown for image annotation."""
+    logger.info("Starting AI Image Generation Annotation Tool")
     
-    if not base_path.exists():
-        logger.error(f"URL folder path does not exist: {base_path}")
+    # Discover URL folders
+    url_base = Path("USER-FILES/04.INPUT/04.1.IMAGE_URL")
+    if not url_base.exists():
+        logger.error(f"URL folder does not exist: {url_base}")
         sys.exit(1)
     
-    folders = [f for f in base_path.iterdir() if f.is_dir() and not f.name.startswith('.')]
-    folders = natsorted(folders, key=lambda x: x.name)
-    
+    folders = natsorted([f for f in url_base.iterdir() if f.is_dir()])
     if not folders:
-        logger.error("No URL folders found in USER-FILES/04.INPUT/04.1.IMAGE_URL")
+        logger.error("No URL folders found")
+        sys.exit(1)
+    logger.info(f"Found {len(folders)} folders")
+    
+    # Discover prompts
+    prompt_base = Path("USER-FILES/04.INPUT/04.2.PROMPT")
+    if not prompt_base.exists():
+        logger.error(f"Prompt folder does not exist: {prompt_base}")
         sys.exit(1)
     
-    logger.info(f"Found {len(folders)} URL folder(s): {[f.name for f in folders]}")
-    return folders
-
-
-def discover_prompts() -> List[Path]:
-    """Find all .txt files in 04.2.PROMPT."""
-    base_path = Path("USER-FILES/04.INPUT/04.2.PROMPT")
-    
-    if not base_path.exists():
-        logger.error(f"Prompt folder path does not exist: {base_path}")
-        sys.exit(1)
-    
-    prompts = list(base_path.glob("*.txt"))
-    prompts = natsorted(prompts, key=lambda x: x.name)
-    
+    prompts = natsorted(list(prompt_base.glob("*.txt")))
     if not prompts:
-        logger.error("No prompt files found in USER-FILES/04.INPUT/04.2.PROMPT")
+        logger.error("No prompt files found")
         sys.exit(1)
+    logger.info(f"Found {len(prompts)} prompts")
     
-    logger.info(f"Found {len(prompts)} prompt file(s): {[p.name for p in prompts]}")
-    return prompts
-
-
-def clean_url(url: str) -> str:
-    """Clean and validate URL, handling special characters."""
-    # Strip all whitespace including tabs, newlines, etc.
-    url = url.strip()
-    
-    # Remove any trailing/leading whitespace characters that might be invisible
-    url = re.sub(r'^\s+|\s+$', '', url)
-    
-    # Check if URL needs encoding for special characters
-    # Split URL into parts to handle the path separately
-    if url.startswith('http'):
-        # Don't encode the whole URL, just ensure it's clean
-        # The URL should already be properly encoded from the source
-        return url
-    
-    return url
-
-
-def match_urls_across_folders(folders: List[Path]) -> List[Dict[str, Optional[str]]]:
-    """Read URLs from text files and group by position/order in each folder."""
-    # Get all txt files from each folder, sorted
-    folder_files = []
+    # Match URLs by position across folders
+    all_files = []
     max_files = 0
-    
     for folder in folders:
         txt_files = natsorted([f for f in folder.iterdir() if f.suffix == '.txt'])
-        folder_files.append(txt_files)
+        all_files.append(txt_files)
         max_files = max(max_files, len(txt_files))
-        logger.info(f"Found {len(txt_files)} files in {folder.name}")
+        logger.info(f"{folder.name}: {len(txt_files)} files")
     
-    # Create list of dictionaries, one per "shot"
-    all_urls = []
-    
-    for shot_idx in range(max_files):
-        shot_data = {
-            'urls': [],
-            'filenames': []
-        }
+    # Create shots by matching files at same position
+    shots = []
+    for idx in range(max_files):
+        urls = []
+        filenames = []
         
-        for folder_idx, files in enumerate(folder_files):
-            if shot_idx < len(files):
-                txt_file = files[shot_idx]
+        for folder_files in all_files:
+            if idx < len(folder_files):
                 try:
-                    raw_content = txt_file.read_text()
-                    url = clean_url(raw_content)
-                    
-                    if url and url.startswith('http'):
-                        shot_data['urls'].append(url)
-                        shot_data['filenames'].append(txt_file.name)
-                        logger.debug(f"Shot {shot_idx+1}, Folder {folder_idx}: {txt_file.name}")
+                    url = folder_files[idx].read_text().strip()
+                    if url.startswith('http'):
+                        urls.append(url)
+                        filenames.append(folder_files[idx].name)
                     else:
-                        shot_data['urls'].append(None)
-                        shot_data['filenames'].append(None)
-                        if url:
-                            logger.warning(f"Invalid URL format in {txt_file}: {url[:50]}...")
+                        urls.append(None)
+                        filenames.append(None)
                 except Exception as e:
-                    shot_data['urls'].append(None)
-                    shot_data['filenames'].append(None)
-                    logger.warning(f"Failed to read URL from {txt_file}: {e}")
+                    logger.warning(f"Failed to read {folder_files[idx]}: {e}")
+                    urls.append(None)
+                    filenames.append(None)
             else:
-                shot_data['urls'].append(None)
-                shot_data['filenames'].append(None)
+                urls.append(None)
+                filenames.append(None)
         
-        all_urls.append(shot_data)
+        shots.append(Shot(urls, filenames))
     
-    logger.info(f"Created {len(all_urls)} shots from {len(folders)} folders")
-    return all_urls
-
-
-def generate_markdown(folders: List[Path], shots: List[Dict[str, Optional[str]]], 
-                     prompts: List[Path]) -> str:
-    """Create the annotation markdown content."""
+    logger.info(f"Created {len(shots)} shots")
+    
+    # Generate markdown
     now = datetime.now()
     timestamp = now.strftime("%y%m%d_%H%M%S")
     date_str = now.strftime("%y%m%d")
     
-    # Start markdown content
     lines = ["<!--- REVIEW_START -->"]
     lines.append(f"# Image Review {date_str}")
     lines.append("---")
     lines.append(f"- **Generated:** {timestamp}")
     
-    # Add column metadata
     for i, folder in enumerate(folders, 1):
-        lines.append(f"- **Column {i}:** [Generation notes filled out manually by user]")
+        lines.append(f"- **Column {i}:** [Generation notes]")
     
-    total_images = len(shots)
-    lines.append(f"- **Total Images:** {total_images}")
-    lines.append(f"<!--- TOTAL_IMAGES: {total_images} -->")
+    lines.append(f"- **Total Images:** {len(shots)}")
+    lines.append(f"<!--- TOTAL_IMAGES: {len(shots)} -->")
     lines.append("---")
     
-    # Generate shots
-    for shot_num, shot_data in enumerate(shots, 1):
+    # Generate each shot
+    for shot_num, shot in enumerate(shots, 1):
         lines.append(f"## Shot {shot_num}")
         lines.append("")
         
-        # Split folders into groups of 3 for table rows
-        max_cols = 3
-        for row_start in range(0, len(folders), max_cols):
-            row_end = min(row_start + max_cols, len(folders))
-            row_folders = folders[row_start:row_end]
+        # Create tables with max 3 columns per row
+        for row_start in range(0, len(folders), 3):
+            row_end = min(row_start + 3, len(folders))
             
-            # Table header for this row
+            # Headers
             headers = []
-            separators = []
-            for folder_idx in range(row_start, row_end):
-                folder = folders[folder_idx]
-                if shot_data['filenames'][folder_idx]:
-                    # Use actual filename for header
-                    filename = shot_data['filenames'][folder_idx]
-                    # Convert .txt to .jpeg for display
-                    display_name = filename.replace('.txt', '.jpeg')
-                    headers.append(f"{folder.name}/{display_name:30}"[:60])
+            for i in range(row_start, row_end):
+                if shot.filenames[i]:
+                    name = shot.filenames[i].replace('.txt', '.jpeg')
+                    headers.append(f"{folders[i].name}/{name}"[:60])
                 else:
-                    headers.append(f"{folder.name}/[No file]                      "[:60])
-                separators.append("-" * 59)
+                    headers.append(f"{folders[i].name}/[No file]")
             
             lines.append("| " + " | ".join(headers) + " |")
-            lines.append("| " + " | ".join(separators) + " |")
+            lines.append("| " + " | ".join(["-" * 59] * len(headers)) + " |")
             
-            # Table content with images using URLs
-            img_cells = []
-            for folder_idx in range(row_start, row_end):
-                url = shot_data['urls'][folder_idx]
-                if url:
-                    img_cells.append(f"![image]({url})")
+            # Images
+            imgs = []
+            for i in range(row_start, row_end):
+                if shot.urls[i]:
+                    imgs.append(f"![image]({shot.urls[i]})")
                 else:
-                    img_cells.append("[No image]")
+                    imgs.append("[No image]")
             
-            lines.append("| " + " | ".join(img_cells) + " |")
+            lines.append("| " + " | ".join(imgs) + " |")
             lines.append("")
         
-        # Add prompt if available
-        prompt_idx = shot_num - 1
-        if prompt_idx < len(prompts):
-            prompt_file = prompts[prompt_idx]
-            prompt_content = prompt_file.read_text().strip()
-            
-            lines.append("<!--- PROMPT_START -->")
+        # Add prompt
+        lines.append("<!--- PROMPT_START -->")
+        if shot_num - 1 < len(prompts):
+            prompt_file = prompts[shot_num - 1]
             lines.append(f"**{prompt_file.name}:**")
             lines.append("```text")
-            lines.append(prompt_content)
+            lines.append(prompt_file.read_text().strip())
             lines.append("```")
-            lines.append("")
-            lines.append("<!--- PROMPT_END -->")
         else:
-            lines.append("<!--- PROMPT_START -->")
             lines.append("**Prompt:**")
             lines.append("```text")
             lines.append("[No prompt available]")
             lines.append("```")
-            lines.append("")
-            lines.append("<!--- PROMPT_END -->")
+        lines.append("")
+        lines.append("<!--- PROMPT_END -->")
         
+        # Add critique section
         lines.append("")
         lines.append("<!--- CRITIQUE_START -->")
         lines.append("**Critique:**")
@@ -217,44 +161,15 @@ def generate_markdown(folders: List[Path], shots: List[Dict[str, Optional[str]]]
     lines.append("")
     lines.append("<!--- REVIEW_END -->")
     
-    return "\n".join(lines)
-
-
-def main() -> None:
-    """Orchestrate the entire process."""
-    logger.info("Starting AI Image Generation Annotation Tool (URL mode)")
+    # Write output
+    output_dir = Path(f"USER-FILES/05.OUTPUT/{timestamp}")
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    try:
-        # Discover inputs
-        folders = discover_url_folders()
-        prompts = discover_prompts()
-        
-        # Match URLs from text files
-        shots = match_urls_across_folders(folders)
-        
-        if not shots:
-            logger.error("No URL files found to process")
-            sys.exit(1)
-        
-        # Generate markdown
-        markdown_content = generate_markdown(folders, shots, prompts)
-        
-        # Create output directory
-        now = datetime.now()
-        timestamp = now.strftime("%y%m%d_%H%M%S")
-        output_dir = Path(f"USER-FILES/05.OUTPUT/{timestamp}")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Write output file
-        output_file = output_dir / f"Image_Review_{timestamp}.md"
-        output_file.write_text(markdown_content)
-        
-        logger.success(f"✓ Markdown generated successfully: {output_file}")
-        logger.info(f"Total shots created: {len(shots)}")
-        
-    except Exception as e:
-        logger.error(f"Failed to generate markdown: {e}")
-        sys.exit(1)
+    output_file = output_dir / f"Image_Review_{timestamp}.md"
+    output_file.write_text("\n".join(lines))
+    
+    logger.success(f"✓ Generated: {output_file}")
+    logger.info(f"Total shots: {len(shots)}")
 
 
 if __name__ == "__main__":

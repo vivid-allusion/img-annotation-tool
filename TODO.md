@@ -1,59 +1,80 @@
 # TODO
 
-## Setup Tasks
-- [x] Create src/ directory structure
-- [x] Create requirements.txt with dependencies (natsort, loguru)
-- [x] Create main.py file with proper imports and type hints
+## High Priority Tasks (Quick Wins - ~1 hour total)
 
-## Core Discovery Functions
-- [x] Implement `discover_image_folders()` to find subdirectories in USER-FILES/04.INPUT/04.1.IMAGE_URL
-- [x] Implement `discover_prompts()` to find .txt files in USER-FILES/04.INPUT/04.2.PROMPT
-- [x] Add natural sorting to both discovery functions using natsort
+### 1. Remove Unused Imports (2 minutes) ✅
+- [x] Remove `from collections import defaultdict` from line 9 in src/main.py
+- [x] Remove `from urllib.parse import quote, unquote` from line 10 in src/main.py
 
-## Image Matching Logic
-- [x] Implement `match_images_across_folders()` to group images by filename
-- [x] Handle mismatched images gracefully (log warnings, continue)
-- [x] Support image formats: .jpg, .jpeg, .png, .webp
+### 2. Extract Methods from `generate_markdown()` (30 minutes) ✅
+- [x] Create `_generate_header()` method for metadata section
+- [x] Create `_generate_shot_tables()` method for image table generation
+- [x] Create `_generate_prompt_section()` method for prompt handling
+- [x] Create `_generate_critique_section()` method for critique blocks
+- [x] Define constants for HTML comment markers (REVIEW_START, REVIEW_END, etc.)
 
-## Markdown Generation
-- [x] Implement `generate_markdown_header()` with timestamp and metadata
-- [x] Implement `generate_table_row()` with dynamic column support (1 to N folders)
-- [x] Implement `generate_prompt_section()` with HTML comment markers
-- [x] Implement `generate_critique_section()` with placeholder text
-- [x] Combine all sections in `generate_markdown()` main function
+### 3. Create Configuration Management (20 minutes) ✅
+- [x] Create config.py with GenerationConfig dataclass
+- [x] Move hardcoded paths to configuration:
+  - `USER-FILES/04.INPUT/04.1.IMAGE_URL`
+  - `USER-FILES/04.INPUT/04.2.PROMPT`
+  - `USER-FILES/05.OUTPUT/`
+- [x] Make `max_cols = 3` configurable
+- [x] Consider environment variables for override
 
-## Output Management
-- [x] Create timestamped output directory (YYMMDD_HHMMSS format)
-- [x] Generate output filename: Image_Review_{YYMMDD_HHMMSS}.md
-- [x] Write markdown content to output file
-- [x] Ensure USER-FILES/05.OUTPUT path exists
+## Medium Priority Tasks (~1 hour total)
 
-## Error Handling
-- [x] Add validation for missing image folders (exit with clear message)
-- [x] Add validation for missing prompt files (exit with clear message)
-- [x] Implement proper exit codes (0 for success, 1 for error)
-- [x] Add loguru logging for all major steps
+### 4. Improve Error Handling (15 minutes) ✅
+- [x] Replace generic `except Exception` with specific exceptions in `match_urls_across_folders()`
+- [x] Add specific handling for IOError, ValueError, FileNotFoundError
+- [x] Improve error messages with more context
 
-## Main Orchestration
-- [x] Implement `main()` function to orchestrate entire process
-- [x] Add proper error handling with try/except blocks
-- [x] Log success message with output file path
-- [x] Ensure script runs with `python3 -m src.main`
+### 5. Create Domain Models with Dataclasses (30 minutes) ✅
+- [x] Create ShotData dataclass to replace Dict[str, Optional[str]]
+- [x] Create GenerationConfig dataclass for configuration
+- [x] Update type hints throughout the codebase
+- [x] Consider creating URLFile and PromptFile models
 
-## Testing & Verification
-- [x] Test with 1 image folder (single column layout)
-- [x] Test with 2 image folders (two column layout)
-- [x] Test with 3+ image folders (multi-column layout)
-- [x] Verify HTML comment markers are correctly placed
-- [x] Verify natural sorting works correctly
-- [x] Test error messages for missing inputs
-- [x] Ensure output matches few_shot examples in format
+### 6. Extract File Discovery Logic (20 minutes) ✅
+- [x] Create FileDiscovery class for finding folders and files
+- [x] Move `discover_url_folders()` to FileDiscovery
+- [x] Move `discover_prompts()` to FileDiscovery
+- [x] Add validation methods for paths
 
+## Low Priority Tasks (~3 hours total)
 
+### 7. Add Unit Tests (2 hours)
+- [ ] Create test_file_discovery.py for folder/file discovery
+- [ ] Create test_url_processing.py for URL cleaning and validation
+- [ ] Create test_markdown_generation.py for markdown output
+- [ ] Create test_matching.py for position-based file matching
+- [ ] Add pytest configuration
+- [ ] Set up coverage reporting
 
+### 8. Performance Improvements (1 hour)
+- [ ] Implement batch file reading for large datasets
+- [ ] Consider async I/O for parallel file reading
+- [ ] Profile memory usage with large datasets
+- [ ] Optimize string building for very large documents
 
+### 9. Logging Configuration (15 minutes)
+- [ ] Create logging.yaml configuration file
+- [ ] Add log rotation settings
+- [ ] Configure different log levels for production/debug
+- [ ] Add performance metrics logging
 
+## Additional Refactoring Opportunities
 
+### 10. Separate Concerns into Classes
+- [ ] Create MarkdownGenerator class for all markdown operations
+- [ ] Create URLProcessor class for URL cleaning and validation
+- [ ] Create ImageAnnotationTool main orchestrator class
+
+### 11. Code Quality Improvements
+- [ ] Add docstrings to all functions
+- [ ] Add inline comments for complex logic
+- [ ] Consider adding pre-commit hooks for formatting
+- [ ] Set up GitHub Actions for automated testing
 
 ### ⛔ STOP HERE ⛔
 
