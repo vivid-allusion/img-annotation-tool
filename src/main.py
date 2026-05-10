@@ -65,7 +65,8 @@ def main() -> None:
             if idx < len(folder_files):
                 try:
                     url = folder_files[idx].read_text().strip()
-                    if url.startswith('http'):
+                    valid_ext = url.lower().endswith(('.jpg', '.jpeg', '.png'))
+                    if url.startswith('http') and valid_ext:
                         urls.append(url)
                         filenames.append(folder_files[idx].name)
                     else:
@@ -79,7 +80,8 @@ def main() -> None:
                 urls.append(None)
                 filenames.append(None)
         
-        shots.append(Shot(urls, filenames))
+        if any(u is not None for u in urls):
+            shots.append(Shot(urls, filenames))
     
     logger.info(f"Created {len(shots)} shots")
     
@@ -105,9 +107,9 @@ def main() -> None:
         lines.append(f"## Shot {shot_num}")
         lines.append("")
         
-        # Create tables with max 3 columns per row
-        for row_start in range(0, len(folders), 3):
-            row_end = min(row_start + 3, len(folders))
+        # Create tables with max 2 columns per row
+        for row_start in range(0, len(folders), 2):
+            row_end = min(row_start + 2, len(folders))
             
             # Headers
             headers = []
@@ -150,19 +152,19 @@ def main() -> None:
         
         # Add critique section
         lines.append("")
-        lines.append("<!--- CRITIQUE_START -->")
-        lines.append("**Critique:**")
+        lines.append("<!--- USER_START -->")
+        lines.append("**User:**")
         lines.append("```text")
-        lines.append("[To be filled by user]")
+        lines.append("")
         lines.append("```")
-        lines.append("<!--- CRITIQUE_END -->")
+        lines.append("<!--- USER_END -->")
         lines.append("---")
     
     lines.append("")
     lines.append("<!--- REVIEW_END -->")
     
     # Write output
-    output_dir = Path(f"USER-FILES/05.OUTPUT/{timestamp}")
+    output_dir = Path(f"USER-FILES/05.OUTPUT/{timestamp}_IMG-ANNOTATION")
     output_dir.mkdir(parents=True, exist_ok=True)
     
     output_file = output_dir / f"Image_Review_{timestamp}.md"
